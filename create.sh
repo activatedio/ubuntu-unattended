@@ -61,6 +61,14 @@ bootable=yes
 seed_file="preseed.cfg"
 seed_path="$DIR/$seed_file"
 
+select_disk=$DEVICE
+
+if [ -z "$select_disk" ]; then
+  select_disk='/dev/sda'
+fi
+
+select_disk_equals=`echo $select_disk | sed -r 's/\//=/g'`
+
 # download the ubunto iso. If it already exists, do not delete in the end.
 cd $tmp
 if [[ ! -f $tmp/$download_file ]]; then
@@ -112,11 +120,18 @@ chmod 600 /home/$username/.ssh/authorized_keys
 chown -R $username:$username /home/$username/.ssh
 echo "$username ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/020_${username}-nopasswd
 chmod 440 /etc/sudoers.d/020_${username}-nopasswd
+sed -i 's/GRUB_HIDDEN_TIMEOUT=0/GRUB_HIDDEN_TIMEOUT=5/' /etc/default/grub
+sed -i 's/GRUB_HIDDEN_TIMEOUT_QUIET=true/GRUB_HIDDEN_TIMEOUT_QUIET=false/' /etc/default/grub
+sed -i 's/vt_handoff="1"/vt_handoff="0"/' /etc/grub.d/10_linux 
+update-grub
 EOF
 
 chmod 755 $tmp/iso_new/preseed/late.sh
-
+ 
 cat << EOF > $tmp/iso_new/preseed/preseed.cfg
+# general options
+d-i debconf/priority                                        string      critical
+
 # regional setting
 d-i debian-installer/language                               string      en_US:en
 d-i debian-installer/country                                string      US
@@ -187,14 +202,16 @@ d-i partman-md/confirm_nooverwrite                          boolean     true
 d-i partman-auto/method                                     string      lvm
 d-i partman-auto-lvm/guided_size                            string      max
 d-i partman-partitioning/confirm_write_new_label            boolean     true
+partman-auto partman-auto/select_disk                       select      /var/lib/partman/devices/${select_disk_equals}
+d-i partman/early_command                                   string      debconf-set partman-auto/disk "\$(list-devices disk | head -n1)"; pvremove -y -ff \`list-devices disk | head -n1\`* || true
 
 # grub boot loader
 d-i grub-installer/only_debian                              boolean     true
 d-i grub-installer/with_other_os                            boolean     true
+d-i grub-installer/bootdev                                  string      ${select_disk}
 
 # finish installation
 d-i finish-install/reboot_in_progress                       note
-d-i finish-install/keep-consoles                            boolean     false
 d-i cdrom-detect/eject                                      boolean     true
 d-i debian-installer/exit/halt                              boolean     false
 d-i debian-installer/exit/poweroff                          boolean     true
@@ -234,4 +251,16 @@ echo " your username is: $username"
 echo " your hostname is: $hostname"
 echo " your timezone is: $timezone"
 echo
+
+if [ -z "$WRITE_TO" ]; then
+  exit 0
+fi
+
+df -H | grep $WRITE_TO | awk '{ print $1 }' | xargs -r sudo umount
+
+dd if=$tmp/$new_iso_name of=$WRITE_TO bs=4M
+sync
+
+echo "Wrote to device $WRITE_TO. Now safe to remove"
+
 
