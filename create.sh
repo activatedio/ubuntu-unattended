@@ -96,25 +96,114 @@ echo en > $tmp/iso_new/isolinux/lang
 sed -i -r 's/timeout\s+[0-9]+/timeout 1/g' $tmp/iso_new/isolinux/isolinux.cfg
 
 # set late command
+late_command="cp /target/media/cdrom/preseed/late.sh /target/tmp; in-target /tmp/late.sh;"
 
-late_command="in-target /cdrom/preseed.late.sh;"
+sshkey_contents=`cat $sshkey`
 
-cp $seed_path $tmp/iso_new/preseed/preseed.cfg
-cp $sshkey $tmp/iso_new/preseed/id_rsa.pub
-cp $DIR/late.sh $tmp/iso_new/preseed/late.sh
+cat << EOF > $tmp/iso_new/preseed/late.sh
+#!/usr/bin/env bash
+
+set -e
+
+mkdir /home/$username/.ssh
+chmod 700 /home/$username/.ssh
+echo "$sshkey_contents" > /home/$username/.ssh/authorized_keys
+chmod 600 /home/$username/.ssh/authorized_keys
+chown -R $username:$username /home/$username/.ssh
+echo "$username ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/020_${username}-nopasswd
+chmod 440 /etc/sudoers.d/020_${username}-nopasswd
+EOF
+
 chmod 755 $tmp/iso_new/preseed/late.sh
+
+cat << EOF > $tmp/iso_new/preseed/preseed.cfg
+# regional setting
+d-i debian-installer/language                               string      en_US:en
+d-i debian-installer/country                                string      US
+d-i debian-installer/locale                                 string      en_US
+d-i debian-installer/splash                                 boolean     false
+d-i localechooser/supported-locales                         multiselect en_US.UTF-8
+d-i pkgsel/install-language-support                         boolean     true
+
+# keyboard selection
+d-i console-setup/ask_detect                                boolean     false
+d-i keyboard-configuration/modelcode                        string      pc105
+d-i keyboard-configuration/layoutcode                       string      us
+d-i keyboard-configuration/variantcode                      string      intl
+d-i keyboard-configuration/xkb-keymap                       select      us(intl)
+d-i debconf/language                                        string      en_US:en
+
+# network settings
+d-i netcfg/choose_interface                                 select      auto
+d-i netcfg/dhcp_timeout                                     string      5
+d-i netcfg/get_hostname                                     string      ${hostname}
+d-i netcfg/get_domain                                       string      ${hostname}
+
+# mirror settings
+d-i mirror/country                                          string      manual
+d-i mirror/http/hostname                                    string      archive.ubuntu.com
+d-i mirror/http/directory                                   string      /ubuntu
+d-i mirror/http/proxy                                       string
+
+# clock and timezone settings
+d-i time/zone                                               string      ${timezone}
+d-i clock-setup/utc                                         boolean     false
+d-i clock-setup/ntp                                         boolean     true
+
+# user account setup
+d-i passwd/root-login                                       boolean     false
+d-i passwd/make-user                                        boolean     true
+d-i passwd/user-fullname                                    string      ${username}
+d-i passwd/username                                         string      ${username}
+d-i passwd/user-password-crypted                            password    !
+d-i user-setup/encrypt-home                                 boolean     false
+
+# configure apt
+d-i apt-setup/restricted                                    boolean     true
+d-i apt-setup/universe                                      boolean     true
+d-i apt-setup/backports                                     boolean     true
+d-i apt-setup/services-select                               multiselect security
+d-i apt-setup/security_host                                 string      security.ubuntu.com
+d-i apt-setup/security_path                                 string      /ubuntu
+tasksel tasksel/first                                       multiselect Basic Ubuntu server
+d-i pkgsel/include                                          string      openssh-server
+d-i pkgsel/upgrade                                          select      safe-upgrade
+d-i pkgsel/update-policy                                    select      none
+d-i pkgsel/updatedb                                         boolean     true
+
+# disk partitioning
+d-i partman/confirm_write_new_label                         boolean     true
+d-i partman/choose_partition                                select      finish
+d-i partman/confirm_nooverwrite                             boolean     true
+d-i partman/confirm                                         boolean     true
+d-i partman-auto/purge_lvm_from_device                      boolean     true
+d-i partman-lvm/device_remove_lvm                           boolean     true
+d-i partman-lvm/confirm                                     boolean     true
+d-i partman-lvm/confirm_nooverwrite                         boolean     true
+d-i partman-auto-lvm/no_boot                                boolean     true
+d-i partman-md/device_remove_md                             boolean     true
+d-i partman-md/confirm                                      boolean     true
+d-i partman-md/confirm_nooverwrite                          boolean     true
+d-i partman-auto/method                                     string      lvm
+d-i partman-auto-lvm/guided_size                            string      max
+d-i partman-partitioning/confirm_write_new_label            boolean     true
+
+# grub boot loader
+d-i grub-installer/only_debian                              boolean     true
+d-i grub-installer/with_other_os                            boolean     true
+
+# finish installation
+d-i finish-install/reboot_in_progress                       note
+d-i finish-install/keep-consoles                            boolean     false
+d-i cdrom-detect/eject                                      boolean     true
+d-i debian-installer/exit/halt                              boolean     false
+d-i debian-installer/exit/poweroff                          boolean     true
+EOF
 
 # include firstrun script
 echo "
 # setup firstrun script
 d-i preseed/late_command                                    string      $late_command" >> $tmp/iso_new/preseed/$seed_file
-
-# update the seed file to reflect the users' choices
-# the normal separator for sed is /, but both the password and the timezone may contain it
-# so instead, I am using @
-sed -i "s@{{username}}@$username@g" $tmp/iso_new/preseed/$seed_file
-sed -i "s@{{hostname}}@$hostname@g" $tmp/iso_new/preseed/$seed_file
-sed -i "s@{{timezone}}@$timezone@g" $tmp/iso_new/preseed/$seed_file
 
 # calculate checksum for seed file
 seed_checksum=$(md5sum $tmp/iso_new/preseed/$seed_file)
