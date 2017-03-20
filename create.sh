@@ -9,7 +9,7 @@ tmp="/tmp"  # destination folder to store the final iso file
 hostname="ubuntu"
 # TODO - this is imperfect
 currentuser="$SUDO_USER"
-sshkey="$HOME/.ssh/id_rsa.pub"
+sshkey="/home/$currentuser/.ssh/id_rsa.pub"
 
 if [[ ! -e "$sshkey" ]]; then
   echo "SSH key must first be generated via ssh-keygen"
