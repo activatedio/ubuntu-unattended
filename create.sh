@@ -233,7 +233,7 @@ sed -i "/label install/ilabel autoinstall\n\
 
 echo " creating the remastered iso"
 cd $tmp/iso_new
-mkisofs -D -r -V "ACTIVATED_UBUNTU" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o $tmp/$new_iso_name . 
+genisoimage -D -r -V "ACTIVATED_UBUNTU" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o $tmp/$new_iso_name . 
 
 isohybrid $tmp/$new_iso_name
 
