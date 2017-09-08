@@ -113,6 +113,9 @@ cat << EOF > $tmp/iso_new/preseed/late.sh
 
 set -e
 
+apt-get update
+apt-get install -y python
+
 mkdir /home/$username/.ssh
 chmod 700 /home/$username/.ssh
 echo "$sshkey_contents" > /home/$username/.ssh/authorized_keys
